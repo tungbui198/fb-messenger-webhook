@@ -10,7 +10,7 @@ from fbmessenger.sender_actions import SenderAction
 from sanic.request import Request
 from sanic import Blueprint, response
 from sanic.response import HTTPResponse
-from typing import Text, Dict, Any, Awaitable, Optional
+from typing import Text, Dict, Any, Optional, Callable
 
 structlogger = structlog.get_logger()
 
@@ -25,7 +25,7 @@ class Messenger:
     def __init__(
         self,
         page_access_token: Text,
-        on_new_message: Awaitable[Any],
+        on_new_message: Callable,
     ) -> None:
 
         self.on_new_message = on_new_message
@@ -136,8 +136,8 @@ class Messenger:
         await out_channel.send_action(sender_id, sender_action="typing_on")
         # noinspection PyBroadException
         try:
-            response = self.on_new_message(text)
-            await out_channel.send_text_message(sender_id, response, metadata)
+            response = self.on_new_message(text, metadata)
+            await out_channel.send_text_message(sender_id, response)
         except Exception:
             logger.exception(
                 "Exception when trying to handle webhook for facebook message."
@@ -212,9 +212,16 @@ class FacebookInput:
     
     def url_prefix(self) -> Text:
         return self.name()
+    
+    def get_metadata(self, request: Request) -> Optional[Dict[Text, Any]]:
+        metadata = {}
+        messaging_payload = request.json["entry"][0]["messaging"][0]
+        metadata["sender_id"] = messaging_payload["sender"]["id"]
+        metadata["page_id"] = messaging_payload["recipient"]["id"]
+        return metadata
 
     def blueprint(
-        self, on_new_message: Awaitable[Any]
+        self, on_new_message: Callable
     ) -> Blueprint:
 
         fb_webhook = Blueprint("fb_webhook", __name__)
@@ -231,7 +238,8 @@ class FacebookInput:
             else:
                 logger.warning(
                     "Invalid fb verify token! Make sure this matches "
-                    "your webhook settings on the facebook app."
+                    "your webhook settings on the facebook app. "
+                    f"{request.args.get('hub.verify_token')} != {self.fb_verify}"
                 )
                 return response.text("failure, invalid token")
 

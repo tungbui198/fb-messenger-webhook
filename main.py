@@ -1,11 +1,18 @@
 import os
+import dotenv
 from sanic import Sanic
 from urllib.parse import urljoin
+from typing import Text, Dict, Any, Optional
+
 from facebook import FacebookInput
 
 
-async def handler(message) -> None:
-    return message.upper()
+# loading the .env file
+dotenv.load_dotenv()
+
+
+def handler(message: Text, metadata: Optional[Dict[Text, Any]]) -> None:
+    return f"This is auto answer for question: {message}"
 
 
 app = Sanic(__name__)
